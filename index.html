@@ -17,6 +17,12 @@ canvas{display:block;}
 <body>
 
 <script type="module">
+    const audio = document.getElementById("bgm");
+
+window.addEventListener("click", () => {
+    audio.play().catch(err => console.log("Autoplay blocked"));
+});
+
 
 import * as THREE from "https://unpkg.com/three@0.152.2/build/three.module.js";
 import { OrbitControls } from "https://unpkg.com/three@0.152.2/examples/jsm/controls/OrbitControls.js?module";
@@ -441,4 +447,5 @@ renderer.render(scene,camera);
 
 </script>
 </body>
+<audio id="bgm" src="./music.mp3" loop></audio>
 </html>
