@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trần Lê Ngọc Nhi</title>
+
+<style>
+body{
+    margin:0;
+    overflow:hidden;
+    background:radial-gradient(circle at center,#140022 0%,#000000 70%);
+}
+canvas{display:block;}
+</style>
+</head>
+<body>
+
+<script type="module">
+
+import * as THREE from "https://unpkg.com/three@0.152.2/build/three.module.js";
+import { OrbitControls } from "https://unpkg.com/three@0.152.2/examples/jsm/controls/OrbitControls.js?module";
+
+/* ================= GLOBAL ================= */
+
+let scene,camera,renderer,controls;
+let heartParticles,imageRing;
+let fireworks=[];
+let clock=new THREE.Clock();
+let raycaster=new THREE.Raycaster();
+let mouse=new THREE.Vector2();
+let selectedImage=null;
+
+let orbitLetters=[];
+let risingLetters=[];
+let risingTimer=0;
+
+const MESSAGE="Trần Lê Ngọc Nhi";
+const BPM=72;
+const beatSpeed=BPM/60;
+
+/* ================= INIT ================= */
+
+init();
+animate();
+window.addEventListener("click",onClick);
+
+function init(){
+
+scene=new THREE.Scene();
+
+camera=new THREE.PerspectiveCamera(
+60,
+window.innerWidth/window.innerHeight,
+1,
+5000
+);
+camera.position.set(0,0,650);
+
+renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth,window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+controls=new OrbitControls(camera,renderer.domElement);
+controls.enableRotate=false;
+controls.enablePan=false;
+controls.enableZoom=true;
+controls.minDistance=400;
+controls.maxDistance=1200;
+
+createStars();
+createHeart();
+createImageRing();
+createOrbitLetters();
+createRisingLetters();
+
+window.addEventListener("resize",()=>{
+camera.aspect=window.innerWidth/window.innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(window.innerWidth,window.innerHeight);
+});
+}
+
+/* ================= STARS ================= */
+
+function createStars(){
+const geo=new THREE.BufferGeometry();
+const pos=[];
+for(let i=0;i<2000;i++){
+pos.push(
+(Math.random()-0.5)*4000,
+(Math.random()-0.5)*4000,
+(Math.random()-0.5)*4000
+);
+}
+geo.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));
+scene.add(new THREE.Points(
+geo,
+new THREE.PointsMaterial({color:0xffffff,size:2})
+));
+}
+
+/* ================= HEART ================= */
+
+function createHeart(){
+
+const pos=[];
+const col=[];
+const count=12000;
+
+for(let i=0;i<count;i++){
+let u=Math.random()*Math.PI*2;
+let r=Math.random();
+
+let x=16*Math.pow(Math.sin(u),3)*r;
+let y=(13*Math.cos(u)
+-5*Math.cos(2*u)
+-2*Math.cos(3*u)
+-Math.cos(4*u))*r;
+let z=(Math.random()-0.5)*25*r;
+
+pos.push(x*20,y*20,z);
+
+let c=new THREE.Color();
+c.setHSL(0.9,1,0.6+Math.random()*0.2);
+col.push(c.r,c.g,c.b);
+}
+
+const g=new THREE.BufferGeometry();
+g.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));
+g.setAttribute("color",new THREE.Float32BufferAttribute(col,3));
+
+const m=new THREE.PointsMaterial({
+size:3,
+vertexColors:true,
+transparent:true,
+blending:THREE.AdditiveBlending,
+depthWrite:false
+});
+
+heartParticles=new THREE.Points(g,m);
+heartParticles.position.y=-20;
+scene.add(heartParticles);
+}
+
+/* ================= IMAGE RING ================= */
+
+function createImageRing(){
+
+imageRing=new THREE.Group();
+const loader=new THREE.TextureLoader();
+const radius=320;
+const total=23;
+
+for(let i=1;i<=total;i++){
+
+let tex=loader.load(`./image/img${i}.png`);
+let mat=new THREE.SpriteMaterial({map:tex,transparent:true});
+let sp=new THREE.Sprite(mat);
+
+let angle=(i/total)*Math.PI*2;
+
+sp.position.set(
+Math.cos(angle)*radius,
+-320,
+Math.sin(angle)*radius
+);
+
+sp.scale.set(55,55,1);
+
+sp.userData.originalPosition=sp.position.clone();
+sp.userData.originalScale=sp.scale.clone();
+sp.userData.targetPosition=sp.position.clone();
+sp.userData.targetScale=sp.scale.clone();
+
+imageRing.add(sp);
+}
+
+scene.add(imageRing);
+}
+
+/* ================= ORBIT LETTERS ================= */
+
+function createOrbitLetters(){
+
+const radius=520;
+
+for(let i=0;i<MESSAGE.length;i++){
+
+const canvas=document.createElement("canvas");
+canvas.width=256;
+canvas.height=256;
+const ctx=canvas.getContext("2d");
+
+ctx.fillStyle="#ff99dd";
+ctx.shadowColor="#ff33aa";
+ctx.shadowBlur=30;
+ctx.font="bold 120px Arial";
+ctx.textAlign="center";
+ctx.textBaseline="middle";
+ctx.fillText(MESSAGE[i],128,128);
+
+const texture=new THREE.CanvasTexture(canvas);
+
+const letter=new THREE.Sprite(
+new THREE.SpriteMaterial({map:texture,transparent:true})
+);
+
+letter.scale.set(90,90,1);
+
+letter.userData={
+baseAngle:(i/MESSAGE.length)*Math.PI*2,
+radius:radius
+};
+
+orbitLetters.push(letter);
+scene.add(letter);
+}
+}
+
+/* ================= RISING LETTERS ================= */
+
+function createRisingLetters(){
+
+for(let i=0;i<MESSAGE.length;i++){
+
+const canvas=document.createElement("canvas");
+canvas.width=256;
+canvas.height=256;
+const ctx=canvas.getContext("2d");
+
+ctx.fillStyle="#ffccee";
+ctx.shadowColor="#ff66cc";
+ctx.shadowBlur=30;
+ctx.font="bold 110px Arial";
+ctx.textAlign="center";
+ctx.textBaseline="middle";
+ctx.fillText(MESSAGE[i],128,128);
+
+const texture=new THREE.CanvasTexture(canvas);
+
+const letter=new THREE.Sprite(
+new THREE.SpriteMaterial({map:texture,transparent:true,opacity:0})
+);
+
+letter.scale.set(80,80,1);
+letter.position.set(0,-350,0);
+
+letter.userData={
+offset:i*0.4,
+state:"waiting"
+};
+
+risingLetters.push(letter);
+scene.add(letter);
+}
+}
+
+/* ================= EXPLOSION ================= */
+
+function explode(position){
+
+const count=300;
+const pos=[];
+const col=[];
+const velocities=[];
+
+for(let i=0;i<count;i++){
+
+pos.push(position.x,position.y,position.z);
+
+let color=new THREE.Color();
+color.setHSL(Math.random(),1,0.6);
+col.push(color.r,color.g,color.b);
+
+let theta=Math.random()*Math.PI*2;
+let phi=Math.acos(2*Math.random()-1);
+let speed=2+Math.random()*2;
+
+velocities.push(new THREE.Vector3(
+Math.sin(phi)*Math.cos(theta)*speed,
+Math.sin(phi)*Math.sin(theta)*speed,
+Math.cos(phi)*speed
+));
+}
+
+const g=new THREE.BufferGeometry();
+g.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));
+g.setAttribute("color",new THREE.Float32BufferAttribute(col,3));
+
+const m=new THREE.PointsMaterial({
+size:5,
+vertexColors:true,
+transparent:true,
+blending:THREE.AdditiveBlending,
+depthWrite:false
+});
+
+const particles=new THREE.Points(g,m);
+particles.userData={velocities:velocities,life:1};
+
+scene.add(particles);
+fireworks.push(particles);
+}
+
+/* ================= CLICK ================= */
+
+function onClick(event){
+
+mouse.x=(event.clientX/window.innerWidth)*2-1;
+mouse.y=-(event.clientY/window.innerHeight)*2+1;
+
+raycaster.setFromCamera(mouse,camera);
+const intersects=raycaster.intersectObjects(imageRing.children);
+
+if(intersects.length>0){
+
+let obj=intersects[0].object;
+
+if(selectedImage===obj){
+obj.userData.targetPosition=obj.userData.originalPosition.clone();
+obj.userData.targetScale=obj.userData.originalScale.clone();
+selectedImage=null;
+return;
+}
+
+if(selectedImage){
+selectedImage.userData.targetPosition=
+selectedImage.userData.originalPosition.clone();
+selectedImage.userData.targetScale=
+selectedImage.userData.originalScale.clone();
+}
+
+obj.userData.targetPosition=new THREE.Vector3(380,0,320);
+obj.userData.targetScale=new THREE.Vector3(250,250,1);
+
+selectedImage=obj;
+}
+}
+
+/* ================= ANIMATE ================= */
+
+function animate(){
+requestAnimationFrame(animate);
+
+let t=clock.getElapsedTime();
+
+/* Heart beat */
+let pulse=1+Math.pow(Math.sin(t*beatSpeed*Math.PI),4)*0.15;
+heartParticles.scale.set(pulse,pulse,pulse);
+
+/* Orbit letters */
+orbitLetters.forEach((letter,i)=>{
+let angle=letter.userData.baseAngle+t*0.25;
+letter.position.x=Math.cos(angle)*letter.userData.radius;
+letter.position.z=Math.sin(angle)*letter.userData.radius;
+letter.position.y=200+Math.sin(t*2+i)*20;
+letter.lookAt(camera.position);
+});
+
+/* Rising letters */
+risingTimer+=0.003;
+
+risingLetters.forEach(letter=>{
+
+let progress=risingTimer-letter.userData.offset;
+
+if(progress>0 && letter.userData.state==="waiting"){
+letter.userData.state="rising";
+}
+
+if(letter.userData.state==="rising"){
+
+letter.material.opacity=1;
+letter.position.y+=2.5;
+
+if(letter.position.y>=350){
+
+explode(letter.position.clone());
+letter.visible=false;
+letter.userData.state="done";
+}
+}
+});
+
+let allDone=risingLetters.every(l=>l.userData.state==="done");
+
+if(allDone){
+
+setTimeout(()=>{
+
+risingTimer=0;
+
+risingLetters.forEach(l=>{
+l.position.set(0,-350,0);
+l.material.opacity=0;
+l.visible=true;
+l.userData.state="waiting";
+});
+
+},800);
+}
+
+/* Image smooth */
+imageRing.rotation.y+=0.0015;
+imageRing.children.forEach(sp=>{
+sp.position.lerp(sp.userData.targetPosition,0.08);
+sp.scale.lerp(sp.userData.targetScale,0.08);
+});
+
+/* Fireworks update */
+for(let i=fireworks.length-1;i>=0;i--){
+let obj=fireworks[i];
+let pos=obj.geometry.attributes.position;
+
+for(let j=0;j<pos.count;j++){
+let v=obj.userData.velocities[j];
+v.y-=0.03;
+
+pos.setXYZ(
+j,
+pos.getX(j)+v.x,
+pos.getY(j)+v.y,
+pos.getZ(j)+v.z
+);
+}
+
+pos.needsUpdate=true;
+obj.userData.life-=0.012;
+obj.material.opacity=obj.userData.life;
+
+if(obj.userData.life<=0){
+scene.remove(obj);
+fireworks.splice(i,1);
+}
+}
+
+renderer.render(scene,camera);
+}
+
+</script>
+</body>
+</html>
